@@ -129,7 +129,7 @@ def main(config):
         shuffle=True,
         num_workers=config["num_workers"],
         drop_last=False,
-        persistent_workers=True,
+        persistent_workers=config["num_workers"] > 0,
     )
 
     if "eval_batch_size" not in config:
@@ -175,15 +175,11 @@ def main(config):
                 mha_ff_dim_factor=config["mha_ff_dim_factor"],
             )
             vision_encoder = replace_bn_with_gn(vision_encoder)
-        elif config["vision_encoder"] == "vib": 
-            vision_encoder = ViB(
-                obs_encoding_size=config["encoding_size"],
-                context_size=config["context_size"],
-                mha_num_attention_heads=config["mha_num_attention_heads"],
-                mha_num_attention_layers=config["mha_num_attention_layers"],
-                mha_ff_dim_factor=config["mha_ff_dim_factor"],
+        elif config["vision_encoder"] == "vib":
+            raise NotImplementedError(
+                "ViB vision encoder is not yet implemented (vib_placeholder.py is empty). "
+                "Use 'nomad_vint' as vision_encoder in your config."
             )
-            vision_encoder = replace_bn_with_gn(vision_encoder)
         elif config["vision_encoder"] == "vit": 
             vision_encoder = ViT(
                 obs_encoding_size=config["encoding_size"],
@@ -365,24 +361,29 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    with open("config/defaults.yaml", "r") as f:
+    # Resolve paths relative to this script's directory so train.py can be
+    # invoked from any working directory.
+    TRAIN_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    defaults_path = os.path.join(TRAIN_DIR, "config", "defaults.yaml")
+    with open(defaults_path, "r") as f:
         default_config = yaml.safe_load(f)
 
     config = default_config
 
-    with open(args.config, "r") as f:
+    # Support both absolute paths and paths relative to the train/ directory
+    user_config_path = args.config if os.path.isabs(args.config) else os.path.join(TRAIN_DIR, args.config)
+    with open(user_config_path, "r") as f:
         user_config = yaml.safe_load(f)
 
     config.update(user_config)
 
     config["run_name"] += "_" + time.strftime("%Y_%m_%d_%H_%M_%S")
     config["project_folder"] = os.path.join(
-        "logs", config["project_name"], config["run_name"]
+        TRAIN_DIR, "logs", config["project_name"], config["run_name"]
     )
     os.makedirs(
-        config[
-            "project_folder"
-        ],  # should error if dir already exists to avoid overwriting and old project
+        config["project_folder"],  # should error if dir already exists to avoid overwriting
     )
 
     if config["use_wandb"]:
@@ -390,7 +391,7 @@ if __name__ == "__main__":
         wandb.init(
             project=config["project_name"],
             settings=wandb.Settings(start_method="fork"),
-            entity="gnmv2", # TODO: change this to your wandb entity
+            entity=config.get("wandb_entity", None),
         )
         wandb.save(args.config, policy="now")  # save the config file
         wandb.run.name = config["run_name"]

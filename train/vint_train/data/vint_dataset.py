@@ -155,7 +155,7 @@ class ViNT_Dataset(Dataset):
                 dynamic_ncols=True,
                 desc=f"Building LMDB cache for {self.dataset_name}"
             )
-            with lmdb.open(cache_filename, map_size=2**40) as image_cache:
+            with lmdb.open(cache_filename, map_size=2**33) as image_cache:
                 with image_cache.begin(write=True) as txn:
                     for traj_name, time in tqdm_iterator:
                         image_path = get_data_path(self.data_folder, traj_name, time)
@@ -217,7 +217,7 @@ class ViNT_Dataset(Dataset):
         try:
             # load the index_to_data if it already exists (to save time)
             with open(index_to_data_path, "rb") as f:
-                self.index_to_data, self.goals_index = pickle.load(f)
+                self.index_to_data, self.goals_index = pickle.load(f, encoding="latin1")
         except:
             # if the index_to_data file doesn't exist, create it
             self.index_to_data, self.goals_index = self._build_index()
@@ -278,7 +278,7 @@ class ViNT_Dataset(Dataset):
             return self.trajectory_cache[trajectory_name]
         else:
             with open(os.path.join(self.data_folder, trajectory_name, "traj_data.pkl"), "rb") as f:
-                traj_data = pickle.load(f)
+                traj_data = pickle.load(f, encoding="latin1")
             self.trajectory_cache[trajectory_name] = traj_data
             return traj_data
 
