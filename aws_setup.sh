@@ -10,9 +10,12 @@ set -e  # exit on any error
 # ─── Corporate network SSL fix ────────────────────────────────────────────────
 # Infosys and similar corporate networks intercept SSL — disable cert checks
 conda config --set ssl_verify false 2>/dev/null || true
-pip config set global.trusted-host "pypi.org pypi.python.org files.pythonhosted.org download.pytorch.org" 2>/dev/null || true
-export PIP_TRUSTED_HOST="pypi.org pypi.python.org files.pythonhosted.org download.pytorch.org"
+# Add ALL hosts pip might redirect to (pytorch CDN uses download-r2.pytorch.org)
+pip config set global.trusted-host "pypi.org pypi.python.org files.pythonhosted.org download.pytorch.org download-r2.pytorch.org" 2>/dev/null || true
+export PIP_TRUSTED_HOST="pypi.org pypi.python.org files.pythonhosted.org download.pytorch.org download-r2.pytorch.org"
 export PYTHONHTTPSVERIFY=0
+export CURL_CA_BUNDLE=""
+export REQUESTS_CA_BUNDLE=""
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "==> Repo root: $REPO_ROOT"
@@ -56,18 +59,19 @@ conda activate nomad_train
 # ─── 4. Install PyTorch with CUDA 11.8 support ───────────────────────────────
 echo ""
 echo "==> [4/6] Installing PyTorch with CUDA 11.8 support..."
-pip install --trusted-host download.pytorch.org \
-    --trusted-host pypi.org \
-    --trusted-host files.pythonhosted.org \
-    torch==2.0.1+cu118 torchvision==0.15.2+cu118 \
-    --extra-index-url https://download.pytorch.org/whl/cu118
+# Use conda for PyTorch — conda ssl_verify=false avoids the corporate SSL blockage
+# that pip hits when following CDN redirects (download-r2.pytorch.org)
+conda install -y -c pytorch -c nvidia \
+    pytorch==2.0.1 torchvision==0.15.2 pytorch-cuda=11.8
+
+# Helper: pip with all trusted hosts pre-set
+PIP="pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host download.pytorch.org --trusted-host download-r2.pytorch.org"
 
 # Pin huggingface_hub — diffusers==0.11.1 is incompatible with huggingface_hub>=0.23
-pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
-    "huggingface_hub==0.12.1"
+$PIP "huggingface_hub==0.12.1"
 
 # Install all other training dependencies (skip rosbag/roslz4 — Linux ROS only)
-pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
+$PIP \
     tqdm==4.64.0 \
     opencv-python==4.6.0.66 \
     h5py==3.6.0 \
@@ -88,17 +92,17 @@ echo ""
 echo "==> [5/6] Installing diffusion_policy..."
 DIFFPOL_DIR="$REPO_ROOT/diffusion_policy"
 if [ ! -d "$DIFFPOL_DIR" ]; then
-    git clone https://github.com/real-stanford/diffusion_policy.git "$DIFFPOL_DIR"
+    git -c http.sslVerify=false clone https://github.com/real-stanford/diffusion_policy.git "$DIFFPOL_DIR"
 else
     echo "     diffusion_policy already cloned, pulling latest..."
-    git -C "$DIFFPOL_DIR" pull
+    git -C "$DIFFPOL_DIR" -c http.sslVerify=false pull
 fi
-pip install -e "$DIFFPOL_DIR"
+$PIP install -e "$DIFFPOL_DIR"
 
 # ─── 6. Install vint_train package ───────────────────────────────────────────
 echo ""
 echo "==> [6/6] Installing vint_train package..."
-pip install -e "$REPO_ROOT/train/"
+$PIP install -e "$REPO_ROOT/train/"
 
 # ─── Post-install check ───────────────────────────────────────────────────────
 echo ""
