@@ -7,6 +7,13 @@
 
 set -e  # exit on any error
 
+# ─── Corporate network SSL fix ────────────────────────────────────────────────
+# Infosys and similar corporate networks intercept SSL — disable cert checks
+conda config --set ssl_verify false 2>/dev/null || true
+pip config set global.trusted-host "pypi.org pypi.python.org files.pythonhosted.org download.pytorch.org" 2>/dev/null || true
+export PIP_TRUSTED_HOST="pypi.org pypi.python.org files.pythonhosted.org download.pytorch.org"
+export PYTHONHTTPSVERIFY=0
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "==> Repo root: $REPO_ROOT"
 
@@ -35,8 +42,10 @@ fi
 # ─── 3. Create / update the training conda environment ───────────────────────
 echo ""
 echo "==> [3/6] Creating conda environment (nomad_train)..."
-conda env create -f "$REPO_ROOT/train/train_environment.yml" || \
-    conda env update -f "$REPO_ROOT/train/train_environment.yml" --prune
+# Create env with Python 3.8 directly (skip the yml to avoid rosbag/roslz4 which are
+# Linux ROS packages unavailable on Python 3.8+ via pip, and not needed for training)
+conda create -n nomad_train python=3.8.5 numpy matplotlib -y || \
+    conda activate nomad_train
 echo "     Environment ready."
 
 # Activate the env for the rest of this script
@@ -44,19 +53,35 @@ echo "     Environment ready."
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate nomad_train
 
-# ─── 4. Upgrade torch for modern CUDA (AWS typically has CUDA 11.8 / 12.x) ───
+# ─── 4. Install PyTorch with CUDA 11.8 support ───────────────────────────────
 echo ""
 echo "==> [4/6] Installing PyTorch with CUDA 11.8 support..."
-# This overwrites the plain 'torch' from the yaml with a CUDA-aware build.
-# Change cu118 → cu121 if your instance has CUDA 12.x
-pip install --upgrade \
-    torch==2.0.1+cu118 \
-    torchvision==0.15.2+cu118 \
+pip install --trusted-host download.pytorch.org \
+    --trusted-host pypi.org \
+    --trusted-host files.pythonhosted.org \
+    torch==2.0.1+cu118 torchvision==0.15.2+cu118 \
     --extra-index-url https://download.pytorch.org/whl/cu118
 
 # Pin huggingface_hub — diffusers==0.11.1 is incompatible with huggingface_hub>=0.23
-# (cached_download was removed in newer versions)
-pip install "huggingface_hub==0.12.1"
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
+    "huggingface_hub==0.12.1"
+
+# Install all other training dependencies (skip rosbag/roslz4 — Linux ROS only)
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
+    tqdm==4.64.0 \
+    opencv-python==4.6.0.66 \
+    h5py==3.6.0 \
+    wandb==0.12.18 \
+    prettytable \
+    efficientnet-pytorch \
+    diffusers==0.11.1 \
+    lmdb==1.4.1 \
+    vit-pytorch \
+    positional-encodings \
+    matplotlib \
+    ipykernel \
+    pyyaml \
+    warmup-scheduler
 
 # ─── 5. Install diffusion_policy (required by NoMaD) ─────────────────────────
 echo ""
