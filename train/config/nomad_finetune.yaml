@@ -28,8 +28,7 @@ seed: 42
 # Download nomad.pth from:
 #   https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg
 # Place it at:  train/logs/nomad_pretrained/nomad/latest.pth
-# Then uncomment the line below:
-# load_run: nomad_pretrained/nomad
+load_run: nomad_pretrained/nomad
 
 # ─── Model params (must match the pretrained checkpoint) ──────────────────────
 model_type: nomad
