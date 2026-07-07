@@ -24,18 +24,12 @@ sys.path.insert(0, TRAIN_DIR)
 from vint_train.data.vint_dataset import ViNT_Dataset
 from vint_train.models.nomad.nomad import NoMaD, DenseNetwork
 from vint_train.models.nomad.nomad_vint import NoMaD_ViNT, replace_bn_with_gn
-from vint_train.training.train_utils import model_output, get_delta, normalize_data, from_numpy
+from vint_train.training.train_utils import model_output, get_delta, normalize_data, from_numpy, ACTION_STATS
 
 from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 import torch.nn.functional as F
 import tqdm
-
-
-ACTION_STATS = {
-    "min": np.array([-1.6182904, -0.8573991]),
-    "max": np.array([1.6182904, 0.8573991]),
-}
 
 
 def load_config(config_path: str) -> dict:
