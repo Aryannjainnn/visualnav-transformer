@@ -24,7 +24,7 @@ sys.path.insert(0, TRAIN_DIR)
 from vint_train.data.vint_dataset import ViNT_Dataset
 from vint_train.models.nomad.nomad import NoMaD, DenseNetwork
 from vint_train.models.nomad.nomad_vint import NoMaD_ViNT, replace_bn_with_gn
-from vint_train.training.train_utils import model_output, get_delta, normalize_data, from_numpy, ACTION_STATS
+from vint_train.training.train_utils import model_output, ACTION_STATS
 
 from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
@@ -67,12 +67,22 @@ def build_model(config: dict) -> torch.nn.Module:
 
 def find_latest_checkpoint(config: dict) -> str:
     logs_dir = os.path.join(TRAIN_DIR, "logs", config["project_name"])
-    # Find all run folders sorted by modification time (newest first)
     runs = sorted(glob.glob(os.path.join(logs_dir, "*")), key=os.path.getmtime, reverse=True)
     for run in runs:
-        ema_path = os.path.join(run, "ema_latest.pth")
-        if os.path.isfile(ema_path):
-            return ema_path
+        # Prefer ema_latest.pth
+        ema_latest = os.path.join(run, "ema_latest.pth")
+        if os.path.isfile(ema_latest):
+            return ema_latest
+        # Training code has a bug: saves ema_N.pth but not ema_latest.pth
+        # Find the highest-epoch ema checkpoint
+        ema_files = sorted(
+            glob.glob(os.path.join(run, "ema_*.pth")),
+            key=lambda p: int(os.path.basename(p).replace("ema_", "").replace(".pth", ""))
+            if os.path.basename(p) != "ema_latest.pth" else -1
+        )
+        ema_files = [p for p in ema_files if os.path.basename(p) != "ema_latest.pth"]
+        if ema_files:
+            return ema_files[-1]  # highest epoch
         latest_path = os.path.join(run, "latest.pth")
         if os.path.isfile(latest_path):
             return latest_path
@@ -102,7 +112,8 @@ def evaluate(model, noise_scheduler, dataloader, device, config):
         batch_goal = transform(goal_image).to(device)
         action_mask = action_mask.to(device)
         distance = distance.float().to(device)
-        actions = actions.to(device)
+        # ground truth: cumulative waypoints (same space as model_output returns)
+        action_label = actions.to(device)
 
         out = model_output(
             model, noise_scheduler,
@@ -119,24 +130,20 @@ def evaluate(model, noise_scheduler, dataloader, device, config):
                 t = t.mean(dim=-1)
             return (t * action_mask).mean() / (action_mask.mean() + 1e-2)
 
-        deltas = get_delta(actions.cpu().numpy())
-        ndeltas = normalize_data(deltas, ACTION_STATS)
-        naction = from_numpy(ndeltas).to(device)
-
         metrics["gc_dist_loss"].append(
             F.mse_loss(gc_distance, distance.unsqueeze(-1)).item()
         )
         metrics["gc_action_loss"].append(
-            reduce(F.mse_loss(gc_actions, naction, reduction="none")).item()
+            reduce(F.mse_loss(gc_actions, action_label, reduction="none")).item()
         )
         metrics["gc_action_waypts_cos_sim"].append(
-            reduce(F.cosine_similarity(gc_actions[:, :, :2], naction[:, :, :2], dim=-1)).item()
+            reduce(F.cosine_similarity(gc_actions[:, :, :2], action_label[:, :, :2], dim=-1)).item()
         )
         metrics["uc_action_loss"].append(
-            reduce(F.mse_loss(uc_actions, naction, reduction="none")).item()
+            reduce(F.mse_loss(uc_actions, action_label, reduction="none")).item()
         )
         metrics["uc_action_waypts_cos_sim"].append(
-            reduce(F.cosine_similarity(uc_actions[:, :, :2], naction[:, :, :2], dim=-1)).item()
+            reduce(F.cosine_similarity(uc_actions[:, :, :2], action_label[:, :, :2], dim=-1)).item()
         )
 
     return {k: float(np.mean(v)) for k, v in metrics.items()}
