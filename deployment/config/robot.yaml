@@ -1,13 +1,15 @@
 # linear and angular speed limits for the robot
-max_v: 0.2 #0.4 # m/s
-max_w: 0.4 #0.8 # rad/s
-# observation rate fo the robot
-frame_rate: 4 # Hz
-graph_rate: 0.3333 # Hz  
+# UGV02 safe starting values — reduce max_v if robot moves too fast
+max_v: 0.3  # m/s  — increase once tested (typical UGV02 max is ~0.5-1.0)
+max_w: 0.6  # rad/s — increase once tested
+# observation rate of the robot
+frame_rate: 4  # Hz — keep at 4; matches model training rate
+graph_rate: 0.3333  # Hz
 
-# topic names (modify for different robots/nodes)
-vel_teleop_topic: /cmd_vel_mux/input/teleop 
-vel_navi_topic: /cmd_vel_mux/input/navi
-vel_recovery_topic: /cmd_vel_mux/input/recovery
+# topic names — run `rostopic list` on robot to confirm these
+# Common UGV02 setups use /cmd_vel; change if different
+vel_teleop_topic: /cmd_vel
+vel_navi_topic: /cmd_vel
+vel_recovery_topic: /cmd_vel
 
 

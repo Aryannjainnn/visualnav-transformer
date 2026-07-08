@@ -3,7 +3,7 @@
 # image obs topics
 FRONT_IMAGE_TOPIC = "/usb_cam_front/image_raw"
 REVERSE_IMAGE_TOPIC = "/usb_cam_reverse/image_raw"
-IMAGE_TOPIC = "/usb_cam/image_raw"
+IMAGE_TOPIC = "/camera/color/image_raw"  # RealSense D4xx
 
 # exploration topics
 SUBGOALS_TOPIC = "/subgoals"
